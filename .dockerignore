@@ -17,3 +17,6 @@ tmp
 
 Dockerfile
 docker-compose.yml
+
+/services/databases/mysql_data
+/services/databases/mongo_data
