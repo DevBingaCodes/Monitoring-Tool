@@ -28,20 +28,31 @@ const mysqlService = async () => {
 
         //Look for running MySQL system services
         try {
-            const { stdout } = await execAsync("systemctl is-active mysql")
+            const { stdout } = await execAsync(
+                "ss -lntp 2>/dev/null | grep ':3306 '"
+            )
 
-            databases.push({
-                id: "mysql-system",
-                engine: "MySQL",
-                source: "systemd",
-                status: stdout.trim()
-            })
+            if (stdout.trim()) {
+                databases.push({
+                    id: "mysql-host",
+                    engine: "MySQL",
+                    source: "host",
+                    status: "running",
+                    port: 3306
+                })
+            }
         } catch (error) {
-            // MySQL system service not found or not installed.
-            // Ignore and continue.
+            // grep exit code 1 means no process is listening
+            // on port 5432. This is an expected result.
+            if (error.code === 1) {
+                // PostgreSQL host instance not detected.
+            } else {
+                console.error("PostgreSQL host discovery failed:", error)
+            }
         }
 
         return databases
+        
     } catch (error) {
         console.error("MySQL discovery error:", error)
         return []

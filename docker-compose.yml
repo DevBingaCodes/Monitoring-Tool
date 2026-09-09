@@ -8,8 +8,10 @@ services:
       PM2_HOME: /root/.pm2
       HOST_PM2_HOME: /home/binga/.pm2 
     volumes:
-      - /home/binga/.pm2:/root/.pm2
-      - /var/run/docker.sock:/var/run/docker.sock
+        - /etc/postgresql:/etc/postgresql:ro
+        - /var/lib/postgresql:/var/lib/postgresql:ro
+        - /home/binga/.pm2:/root/.pm2
+        - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     build:

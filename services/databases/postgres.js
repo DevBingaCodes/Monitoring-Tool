@@ -27,19 +27,59 @@ const postgresService = async () => {
             })
         })
 
-        //Step 2; Look for PostgreSQL system services
+        //Step 2: Look for POstgreSQL running on the host
         try {
-            const { stdout } = await execAsync("systemctl is-active postgresql")
+            const { stdout } = await execAsync("pg_lsclusters")
 
-            databases.push({
-                id: "postgres-system",
-                engine: "PostgreSQL",
-                source: "systemd",
-                status: stdout.trim()
+            const lines = stdout
+                .trim()
+                .split("\n")
+                .slice(1)
+
+            lines.forEach(line => {
+                const parts = line.trim().split(/\s+/)
+
+                if (parts.length < 7) {
+                    return
+                }
+
+                const [
+                    version,
+                    cluster,
+                    port,
+                    status,
+                    owner,
+                    dataDirectory,
+                    logFile
+                ] = parts
+
+                databases.push({
+                    id: `postgres-host-${version}-${cluster}`,
+                    engine: "PostgreSQL",
+                    source: "host",
+                    status: status === "online"
+                        ? "running"
+                        : "stopped",
+                    version,
+                    cluster,
+                    port: Number(port),
+                    owner,
+                    dataDirectory,
+                    logFile
+                })
             })
+
         } catch (error) {
-            // PostgreSQL system service not found or not installed.
-            // Ignore and continue.
+            if (error.code === 127) {
+                console.error(
+                    "PostgreSQL host discovery failed: pg_lsclusters is not installed."
+                )
+            } else {
+                console.error(
+                    "PostgreSQL host discovery failed:",
+                    error
+                )
+            }
         }
 
         return databases
