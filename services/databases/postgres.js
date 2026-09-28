@@ -29,17 +29,24 @@ const postgresService = async () => {
 
         //Step 2: Look for POstgreSQL running on the host
         try {
-            const { stdout } = await execAsync("pg_lsclusters")
+            const { stdout } = await execAsync(
+                "/usr/bin/pg_lsclusters --no-header",
+                {
+                    timeout: 5000
+                }
+            )
 
             const lines = stdout
                 .trim()
                 .split("\n")
-                .slice(1)
+                .filter(Boolean)
 
             lines.forEach(line => {
                 const parts = line.trim().split(/\s+/)
 
                 if (parts.length < 7) {
+                    console.warn( "Skipping malformed PostgreSQL cluster entry:", line )
+
                     return
                 }
 
@@ -70,16 +77,10 @@ const postgresService = async () => {
             })
 
         } catch (error) {
-            if (error.code === 127) {
-                console.error(
-                    "PostgreSQL host discovery failed: pg_lsclusters is not installed."
-                )
-            } else {
-                console.error(
-                    "PostgreSQL host discovery failed:",
-                    error
-                )
-            }
+            console.error(
+                "PostgreSQL host discovery failed:",
+                error.message
+            )
         }
 
         return databases
