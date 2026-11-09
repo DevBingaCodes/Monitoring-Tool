@@ -37,7 +37,7 @@ jobs:
             echo "NPM: $(npm -v)"
 
             # Verify non-interactive sudo access
-            # sudo -n true
+            sudo -n true
 
             # Install Nginx and Certbot if necessary
             if ! command -v nginx >/dev/null 2>&1 || \
@@ -49,9 +49,10 @@ jobs:
               sudo apt-get install -y nginx certbot python3-certbot-nginx
             fi
 
-            # Clone repository on first deployment
+            # Create application directory
             mkdir -p /home/binga/apps
 
+            # Clone repository on first deployment
             if [ ! -d "$APP_DIR/.git" ]; then
               if [ -e "$APP_DIR" ]; then
                 echo "Application directory exists but is not a Git repository."
@@ -80,8 +81,7 @@ jobs:
             if [ ! -f "$NGINX_CONFIG" ]; then
               echo "Creating Nginx configuration..."
 
-            sudo tee "$NGINX_CONFIG" > /dev/null << NGINX
-            
+              sudo tee "$NGINX_CONFIG" > /dev/null << NGINX
             server {
                 listen 80;
                 listen [::]:80;
@@ -98,7 +98,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
-            NGINX
+NGINX
             fi
 
             # Enable the Nginx site
