@@ -1,3 +1,4 @@
+
 name: Deploy Monitoring Tool
 
 on:
@@ -6,68 +7,130 @@ on:
       - master
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      # 1. Build & Push Backend
-      - name: Build and push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile 
-          push: true
-          tags: allanbinga/monitoring-tool-backend:latest
-
-      # 2. Build & Push Frontend
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: allanbinga/monitoring-tool-frontend:latest
-          no-cache: true
-          build-args: |
-            VITE_BACKEND_ENDPOINT=https://api.monitor.skirill.org/system-monitor/v1
-
   deploy:
-    needs: build-and-push
-    runs-on: ubuntu-24.04
+    name: Deployment Pipeline
+    runs-on: ubuntu-latest
+
     steps:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Deploy to VPS
+      - name: Deploy and Provision VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            # 1. Navigate directly to your manual setup folder
-            cd ${{ secrets.PROJECT_PATH }}
+            set -e
 
-            # 2. Pull down the new layers that were just pushed to Docker Hub
-            echo "Pulling newest images..."
-            docker compose pull
+            APP_DIR="/home/binga/apps/Monitoring-Tool"
+            APP_NAME="Monitoring Tool"
+            DOMAIN="api.monitor.skirill.org"
+            PORT="3500"
+            REPO="git@github.com:DevBingaCodes/Monitoring-Tool.git"
 
-            # 3. Recreate the containers seamlessly using the new image layers
-            echo "Updating containers..."
-            docker compose up -d --force-recreate
+            # Load Node.js through NVM
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            nvm use 26.13.0
 
-            # 4. Remove older, unused image layers to keep your VPS disk clean
-            echo "Pruning dangling images..."
-            docker image prune -f
+            echo "Node: $(node -v)"
+            echo "NPM: $(npm -v)"
 
-            echo "Deployment successful!"
+            # Verify non-interactive sudo access
+            sudo -n true
+
+            # Install Nginx and Certbot if necessary
+            if ! command -v nginx >/dev/null 2>&1 || \
+               ! command -v certbot >/dev/null 2>&1 || \
+               ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
+
+              echo "Installing Nginx and Certbot..."
+              sudo apt-get update
+              sudo apt-get install -y nginx certbot python3-certbot-nginx
+            fi
+
+            # Clone repository on first deployment
+            mkdir -p /home/binga/apps
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              if [ -e "$APP_DIR" ]; then
+                echo "Application directory exists but is not a Git repository."
+                exit 1
+              fi
+
+              echo "Cloning repository..."
+              git clone "$REPO" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            # Ensure SSH-based GitHub authentication
+            git remote set-url origin "$REPO"
+
+            echo "Pulling latest code..."
+            git pull --ff-only origin master
+
+            # Install production dependencies
+            echo "Installing production dependencies..."
+            npm ci --omit=dev
+
+            # Configure Nginx on first deployment
+            NGINX_CONFIG="/etc/nginx/sites-available/$DOMAIN"
+
+            if [ ! -f "$NGINX_CONFIG" ]; then
+              echo "Creating Nginx configuration..."
+
+              sudo tee "$NGINX_CONFIG" > /dev/null << NGINX
+            server {
+                listen 80;
+                listen [::]:80;
+
+                server_name $DOMAIN;
+
+                location / {
+                    proxy_pass http://127.0.0.1:$PORT;
+                    proxy_http_version 1.1;
+
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            NGINX
+            fi
+
+            # Enable the Nginx site
+            sudo ln -sfn "$NGINX_CONFIG" "/etc/nginx/sites-enabled/$DOMAIN"
+
+            sudo nginx -t
+            sudo systemctl enable --now nginx
+            sudo systemctl reload nginx
+
+            # Start or restart the application
+            echo "Starting application..."
+
+            if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
+              pm2 restart "$APP_NAME" --update-env
+            else
+              pm2 start npm --name "$APP_NAME" -- start
+            fi
+
+            pm2 save
+
+            # Issue or install HTTPS certificate
+            echo "Configuring HTTPS..."
+
+            sudo certbot --nginx \
+              -d "$DOMAIN" \
+              --non-interactive \
+              --agree-tos \
+              --register-unsafely-without-email \
+              --redirect
+
+            # Enable automatic certificate renewal
+            sudo systemctl enable --now certbot.timer
+
+            echo "Deployment completed successfully!"
+            pm2 status
           EOF

@@ -12,7 +12,7 @@ app.use(express.json())
 
 //Cors
 const allowedOrigins = [
-  "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "https://monitor.skirill.org"
 
 ];
@@ -41,7 +41,7 @@ app.use("/system-monitor/v1/logs", logsROute)
 // Start the server
 if (process.env.NODE_ENV !== "test") {
   const PORT = process.env.PORT || 3500;
-  app.listen(PORT, () => {
+  app.listen(PORT, "127.0.0.1", () => {
     console.log(`Server started on port ${PORT}`);
   });
 }
