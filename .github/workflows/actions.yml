@@ -80,7 +80,8 @@ jobs:
             if [ ! -f "$NGINX_CONFIG" ]; then
               echo "Creating Nginx configuration..."
 
-              sudo tee "$NGINX_CONFIG" > /dev/null << NGINX
+            sudo tee "$NGINX_CONFIG" > /dev/null << NGINX
+            
             server {
                 listen 80;
                 listen [::]:80;
