@@ -98,7 +98,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
-NGINX
+            NGINX
             fi
 
             # Enable the Nginx site
