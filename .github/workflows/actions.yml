@@ -37,7 +37,7 @@ jobs:
             echo "NPM: $(npm -v)"
 
             # Verify non-interactive sudo access
-            sudo -n true
+            # sudo -n true
 
             # Install Nginx and Certbot if necessary
             if ! command -v nginx >/dev/null 2>&1 || \
